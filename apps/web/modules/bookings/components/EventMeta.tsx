@@ -1,7 +1,8 @@
 import { Timezone as PlatformTimezoneSelect } from "@calcom/atoms/timezone";
+import dayjs from "@calcom/dayjs";
 import { useBookerStoreContext } from "@calcom/features/bookings/Booker/BookerStoreProvider";
-import { useBookerTime } from "@calcom/features/bookings/Booker/hooks/useBookerTime";
 import { fadeInUp } from "@calcom/features/bookings/Booker/config";
+import { useBookerTime } from "@calcom/features/bookings/Booker/hooks/useBookerTime";
 import type { Timezone } from "@calcom/features/bookings/Booker/types";
 import { FromToTime } from "@calcom/features/bookings/Booker/utils/dates";
 import { useTimePreferences } from "@calcom/features/bookings/lib";
@@ -18,6 +19,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo } from "react";
 import { shallow } from "zustand/shallow";
 import i18nConfigration from "../../../../../i18n.json";
+import { isOutsideBusinessHours } from "../lib/isOutsideBusinessHours";
 import { EventDetails, EventMembers, EventMetaSkeleton, EventTitle } from "./event-meta";
 import { ScrollableWithGradients } from "./ScrollableWithGradients";
 
@@ -144,6 +146,10 @@ export const EventMeta = ({
       ? "text-yellow-500"
       : "text-bookinghighlight";
   const userLocale = locale ?? navigator.language;
+  const durationMinutes = selectedDuration || event?.length || 0;
+  const outsideBusinessHours = Boolean(
+    selectedTimeslot && isOutsideBusinessHours(dayjs.utc(selectedTimeslot).tz(timezone), durationMinutes)
+  );
   const translatedDescription = getTranslatedField(
     event?.fieldTranslations ?? [],
     EventTypeAutoTranslatedField.DESCRIPTION,
@@ -215,6 +221,11 @@ export const EventMeta = ({
                   timeZone={timezone}
                   language={i18n.language}
                 />
+              </EventMetaBlock>
+            )}
+            {outsideBusinessHours && (
+              <EventMetaBlock icon="triangle-alert" data-testid="outside-business-hours-meta">
+                <span className="text-semantic-attention">{t("outside_of_business_hours")}</span>
               </EventMetaBlock>
             )}
             <EventDetails event={event} />

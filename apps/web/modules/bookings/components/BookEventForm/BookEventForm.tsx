@@ -1,5 +1,6 @@
 import { getPaymentAppData } from "@calcom/app-store/_utils/payments/getPaymentAppData";
 import { useIsPlatformBookerEmbed } from "@calcom/atoms/hooks/useIsPlatformBookerEmbed";
+import dayjs from "@calcom/dayjs";
 import { useBookerStoreContext } from "@calcom/features/bookings/Booker/BookerStoreProvider";
 import { useBookerTime } from "@calcom/features/bookings/Booker/hooks/useBookerTime";
 import type { UseBookingFormReturnType } from "@calcom/features/bookings/Booker/hooks/useBookingForm";
@@ -16,9 +17,10 @@ import { EmptyScreen } from "@calcom/ui/components/empty-screen";
 import { Form } from "@calcom/ui/components/form";
 import type { TFunction } from "i18next";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import type { FieldError } from "react-hook-form";
 import type { IUseBookingErrors, IUseBookingLoadingStates } from "../../hooks/useBookings";
+import { isOutsideBusinessHours } from "../../lib/isOutsideBusinessHours";
 import { BookingFields } from "./BookingFields";
 import { FormSkeleton } from "./Skeleton";
 
@@ -64,7 +66,10 @@ export const BookEventForm = ({
   eventQuery: {
     isError: boolean;
     isPending: boolean;
-    data?: Pick<BookerEvent, "price" | "currency" | "metadata" | "bookingFields" | "locations"> | null;
+    data?: Pick<
+      BookerEvent,
+      "price" | "currency" | "metadata" | "bookingFields" | "locations" | "length"
+    > | null;
   };
 }) => {
   const eventType = eventQuery.data;
@@ -72,6 +77,7 @@ export const BookEventForm = ({
   const bookingData = useBookerStoreContext((state) => state.bookingData);
   const rescheduleUid = useBookerStoreContext((state) => state.rescheduleUid);
   const username = useBookerStoreContext((state) => state.username);
+  const selectedDuration = useBookerStoreContext((state) => state.selectedDuration);
   const isPlatformBookerEmbed = useIsPlatformBookerEmbed();
   const { timeFormat, timezone } = useBookerTime();
 
@@ -108,6 +114,65 @@ export const BookEventForm = ({
   }
 
   const watchedCfToken = bookingForm.watch("cfToken");
+  const durationMinutes = selectedDuration || eventType.length || 0;
+  const outsideBusinessHours = isOutsideBusinessHours(dayjs.utc(timeslot).tz(timezone), durationMinutes);
+
+  let bookingAlert: ReactNode = null;
+  if (errors.hasFormErrors || errors.hasDataErrors) {
+    bookingAlert = (
+      <div data-testid="booking-fail">
+        <Alert
+          ref={errorRef}
+          className="my-2"
+          severity="info"
+          title={rescheduleUid ? t("reschedule_fail") : t("booking_fail")}
+          message={getError({
+            globalError: errors.formErrors,
+            dataError: errors.dataErrors,
+            t,
+            responseVercelIdHeader,
+            timeFormat,
+            timezone,
+            language: i18n.language,
+          })}
+        />
+      </div>
+    );
+  } else if (isTimeslotUnavailable) {
+    bookingAlert = (
+      <div data-testid="slot-not-allowed-to-book">
+        <Alert
+          severity="info"
+          title={t("unavailable_timeslot_title")}
+          message={
+            <ServerTrans
+              t={t}
+              i18nKey="timeslot_unavailable_book_a_new_time"
+              components={[
+                <button
+                  key="please-select-a-new-time-button"
+                  type="button"
+                  className="underline"
+                  onClick={onCancel}>
+                  Please select a new time
+                </button>,
+              ]}
+            />
+          }
+        />
+      </div>
+    );
+  } else if (outsideBusinessHours) {
+    bookingAlert = (
+      <div className="my-2" data-testid="outside-business-hours-alert">
+        <Alert
+          severity="warning"
+          title={t("outside_of_business_hours")}
+          message={t("outside_of_business_hours_description")}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -132,47 +197,7 @@ export const BookEventForm = ({
           isPaidEvent={isPaidEvent}
           paymentCurrency={paymentCurrency}
         />
-        {errors.hasFormErrors || errors.hasDataErrors ? (
-          <div data-testid="booking-fail">
-            <Alert
-              ref={errorRef}
-              className="my-2"
-              severity="info"
-              title={rescheduleUid ? t("reschedule_fail") : t("booking_fail")}
-              message={getError({
-                globalError: errors.formErrors,
-                dataError: errors.dataErrors,
-                t,
-                responseVercelIdHeader,
-                timeFormat,
-                timezone,
-                language: i18n.language,
-              })}
-            />
-          </div>
-        ) : isTimeslotUnavailable ? (
-          <div data-testid="slot-not-allowed-to-book">
-            <Alert
-              severity="info"
-              title={t("unavailable_timeslot_title")}
-              message={
-                <ServerTrans
-                  t={t}
-                  i18nKey="timeslot_unavailable_book_a_new_time"
-                  components={[
-                    <button
-                      key="please-select-a-new-time-button"
-                      type="button"
-                      className="underline"
-                      onClick={onCancel}>
-                      Please select a new time
-                    </button>,
-                  ]}
-                />
-              }
-            />
-          </div>
-        ) : null}
+        {bookingAlert}
 
         {!isPlatform && (
           <div className="my-3 w-full text-xs text-subtle">

@@ -13,13 +13,16 @@ import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { localStorage } from "@calcom/lib/webstorage";
 import classNames from "@calcom/ui/classNames";
 import { Button } from "@calcom/ui/components/button";
+import { Icon } from "@calcom/ui/components/icon";
 import { SkeletonText } from "@calcom/ui/components/skeleton";
+import { Tooltip } from "@calcom/ui/components/tooltip";
 import { CalendarX2Icon } from "@coss/ui/icons";
 import * as HoverCard from "@radix-ui/react-hover-card";
 import { AnimatePresence, m } from "framer-motion";
 import { useMemo } from "react";
 import type { Slot } from "~/schedules/lib/types";
 import type { IUseBookingLoadingStates } from "../hooks/useBookings";
+import { isOutsideBusinessHours } from "../lib/isOutsideBusinessHours";
 import { OutOfOfficeInSlots } from "./OutOfOfficeInSlots";
 import { SeatsAvailabilityText } from "./SeatsAvailabilityText";
 
@@ -112,8 +115,11 @@ const SlotItem = ({
   const { timeFormat, timezone } = useBookerTime();
   const bookingData = useBookerStoreContext((state) => state.bookingData);
   const layout = useBookerStoreContext((state) => state.layout);
+  const selectedDuration = useBookerStoreContext((state) => state.selectedDuration);
   const hasTimeSlots = !!seatsPerTimeSlot;
   const computedDateWithUsersTimezone = dayjs.utc(slot.time).tz(timezone);
+  const durationMinutes = selectedDuration ?? eventData?.length ?? 0;
+  const outsideBusinessHours = isOutsideBusinessHours(computedDateWithUsersTimezone, durationMinutes);
 
   const bookingFull = !!(hasTimeSlots && slot.attendees && slot.attendees >= seatsPerTimeSlot);
   const isHalfFull = slot.attendees && seatsPerTimeSlot && slot.attendees / seatsPerTimeSlot >= 0.5;
@@ -181,6 +187,14 @@ const SlotItem = ({
               />
             )}
             {computedDateWithUsersTimezone.format(timeFormat)}
+            {outsideBusinessHours && (
+              <Tooltip content={t("outside_of_business_hours")}>
+                <span className="inline-flex" data-testid="outside-business-hours-warning">
+                  <span className="sr-only">{t("outside_of_business_hours")}</span>
+                  <Icon name="triangle-alert" className="h-3.5 w-3.5 text-semantic-attention" aria-hidden />
+                </span>
+              </Tooltip>
+            )}
           </div>
           {bookingFull && <p className="text-sm">{t("booking_full")}</p>}
           {hasTimeSlots && !bookingFull && (
