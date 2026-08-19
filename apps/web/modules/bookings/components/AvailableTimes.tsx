@@ -14,12 +14,14 @@ import { localStorage } from "@calcom/lib/webstorage";
 import classNames from "@calcom/ui/classNames";
 import { Button } from "@calcom/ui/components/button";
 import { SkeletonText } from "@calcom/ui/components/skeleton";
-import { CalendarX2Icon } from "@coss/ui/icons";
+import { Tooltip } from "@calcom/ui/components/tooltip";
+import { CalendarX2Icon, TriangleAlertIcon } from "@coss/ui/icons";
 import * as HoverCard from "@radix-ui/react-hover-card";
 import { AnimatePresence, m } from "framer-motion";
 import { useMemo } from "react";
 import type { Slot } from "~/schedules/lib/types";
 import type { IUseBookingLoadingStates } from "../hooks/useBookings";
+import { isOutsideBusinessHours } from "../lib/isOutsideBusinessHours";
 import { OutOfOfficeInSlots } from "./OutOfOfficeInSlots";
 import { SeatsAvailabilityText } from "./SeatsAvailabilityText";
 
@@ -114,6 +116,7 @@ const SlotItem = ({
   const layout = useBookerStoreContext((state) => state.layout);
   const hasTimeSlots = !!seatsPerTimeSlot;
   const computedDateWithUsersTimezone = dayjs.utc(slot.time).tz(timezone);
+  const outsideBusinessHours = isOutsideBusinessHours(computedDateWithUsersTimezone, eventData?.length ?? 0);
 
   const bookingFull = !!(hasTimeSlots && slot.attendees && slot.attendees >= seatsPerTimeSlot);
   const isHalfFull = slot.attendees && seatsPerTimeSlot && slot.attendees / seatsPerTimeSlot >= 0.5;
@@ -181,6 +184,16 @@ const SlotItem = ({
               />
             )}
             {computedDateWithUsersTimezone.format(timeFormat)}
+            {outsideBusinessHours && (
+              <Tooltip content={t("outside_of_business_hours")}>
+                <span
+                  className="inline-flex"
+                  data-testid="outside-business-hours-warning"
+                  aria-label={t("outside_of_business_hours")}>
+                  <TriangleAlertIcon className="h-4 w-4 text-warning" aria-hidden="true" />
+                </span>
+              </Tooltip>
+            )}
           </div>
           {bookingFull && <p className="text-sm">{t("booking_full")}</p>}
           {hasTimeSlots && !bookingFull && (
