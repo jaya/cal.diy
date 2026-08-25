@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { FieldError } from "react-hook-form";
 import type { IUseBookingErrors, IUseBookingLoadingStates } from "../../hooks/useBookings";
+import { OutsideBusinessHoursWarning } from "../OutsideBusinessHoursWarning";
 import { BookingFields } from "./BookingFields";
 import { FormSkeleton } from "./Skeleton";
 
@@ -64,13 +65,17 @@ export const BookEventForm = ({
   eventQuery: {
     isError: boolean;
     isPending: boolean;
-    data?: Pick<BookerEvent, "price" | "currency" | "metadata" | "bookingFields" | "locations"> | null;
+    data?: Pick<
+      BookerEvent,
+      "price" | "currency" | "metadata" | "bookingFields" | "locations" | "length"
+    > | null;
   };
 }) => {
   const eventType = eventQuery.data;
   const setFormValues = useBookerStoreContext((state) => state.setFormValues);
   const bookingData = useBookerStoreContext((state) => state.bookingData);
   const rescheduleUid = useBookerStoreContext((state) => state.rescheduleUid);
+  const selectedDuration = useBookerStoreContext((state) => state.selectedDuration);
   const username = useBookerStoreContext((state) => state.username);
   const isPlatformBookerEmbed = useIsPlatformBookerEmbed();
   const { timeFormat, timezone } = useBookerTime();
@@ -173,6 +178,16 @@ export const BookEventForm = ({
             />
           </div>
         ) : null}
+
+        {/* An unavailable slot has to be re-picked anyway, so the warning would just be noise there. */}
+        {!isTimeslotUnavailable && (
+          <OutsideBusinessHoursWarning
+            startTime={timeslot}
+            durationInMinutes={selectedDuration || eventType.length}
+            timeZone={timezone}
+            timeFormat={timeFormat}
+          />
+        )}
 
         {!isPlatform && (
           <div className="my-3 w-full text-xs text-subtle">

@@ -4771,5 +4771,9 @@
   "user_updated_successfully": "User updated successfully.",
   "error_updating_user": "There was an error updating this user.",
   "please_reschedule": "Please reschedule.",
+  "outside_business_hours_title": "Outside business hours",
+  "outside_business_hours_day_description": "This booking falls on a non-business day in your timezone.",
+  "outside_business_hours_time_description": "This booking falls outside business hours ({{opensAt}} - {{closesAt}}) in your timezone.",
+  "outside_business_hours_end_description": "This booking runs past {{closesAt}}, when business hours end in your timezone.",
   "ADD_NEW_STRINGS_ABOVE_THIS_LINE_TO_PREVENT_MERGE_CONFLICTS": "↑↑↑↑↑↑↑↑↑↑↑↑↑ Add your new strings above here ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑"
 }
