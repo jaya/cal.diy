@@ -3,7 +3,15 @@
 
 import { execFileSync } from "node:child_process";
 
-import { LABEL_PREFIX, PANEL_MARKER, STATES, TRIGGER_LABEL, parsePanel, renderPanel } from "./lib.mjs";
+import {
+  LABEL_PREFIX,
+  PANEL_MARKER,
+  PanelError,
+  STATES,
+  TRIGGER_LABEL,
+  parsePanel,
+  renderPanel,
+} from "./lib.mjs";
 
 const REPO = process.env.GITHUB_REPOSITORY;
 
@@ -35,7 +43,24 @@ export function loadPanel(issue) {
   const panel = listComments(issue).find(
     (c) => c.user?.login === "github-actions[bot]" && c.body?.startsWith(PANEL_MARKER)
   );
-  return panel ? { id: panel.id, state: parsePanel(panel.body) } : { id: null, state: null };
+  if (!panel) return { id: null, state: null };
+  try {
+    return { id: panel.id, state: parsePanel(panel.body) };
+  } catch (err) {
+    if (!(err instanceof PanelError)) throw err;
+    // Stop loudly on the issue instead of carrying on as if it had no state.
+    comment(
+      issue,
+      [
+        `⚠️ **Harness parado:** ${err.message}.`,
+        "",
+        `O estado em ${panel.html_url} não pôde ser lido, então nenhuma etapa vai rodar nem avançar. ` +
+          "Corrija o painel ou apague-o e adicione a label `priorizado` de novo para recomeçar.",
+        runUrl() ? `\n<sub>[execução no Actions](${runUrl()})</sub>` : "",
+      ].join("\n")
+    );
+    throw err;
+  }
 }
 
 export function savePanel(issue, panelId, state) {

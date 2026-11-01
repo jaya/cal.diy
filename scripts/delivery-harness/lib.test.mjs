@@ -9,10 +9,13 @@ import {
   initialState,
   missingPlanSections,
   parseCommand,
+  PANEL_MARKER,
+  PanelError,
   parsePanel,
   renderPanel,
   renderStageComment,
   route,
+  sanitizeText,
 } from "./lib.mjs";
 
 const now = "2026-10-27T12:00:00.000Z";
@@ -332,6 +335,52 @@ test("the panel round-trips its state and shows the pending decision", () => {
   assert.equal(parsePanel("just a comment"), null);
   const tricky = { ...state, feedback: "fechar --> o comentário" };
   assert.deepEqual(parsePanel(renderPanel(tricky)), tricky);
+});
+
+// Issue #2: vitest output with ANSI colours went into the feedback, GitHub
+// rewrote the control characters on save and the JSON panel became unreadable.
+const ANSI_LOG = "x\u001b[39m\n\\\u001b[90m \u001b[2m❯\u001b[22m TransformPluginContext\r\n\u0007end";
+
+test("the panel stores the state as base64 with no characters GitHub could rewrite", () => {
+  const state = { ...at("implementacao"), feedback: ANSI_LOG };
+  const body = renderPanel(state);
+  const header = body.split("\n-->")[0];
+  assert.match(header, /^<!-- delivery-harness:state base64\n[A-Za-z0-9+/=]+$/);
+  assert.deepEqual(parsePanel(body), state);
+});
+
+test("panels written before base64 are still read", () => {
+  const state = at("aguardando-plano");
+  assert.deepEqual(parsePanel(`${PANEL_MARKER}\n${JSON.stringify(state)}\n-->\n## 🤖 Harness`), state);
+});
+
+test("an unreadable panel throws instead of looking like an issue with no state", () => {
+  const mangled = `${PANEL_MARKER}\n{"state":"implementacao","feedback":"\\^[[39m"}\n-->`;
+  assert.throws(() => parsePanel(mangled), PanelError);
+  assert.throws(() => parsePanel(`${PANEL_MARKER} base64\n!!!\n-->`), PanelError);
+  const unknown = Buffer.from(JSON.stringify({ state: "sumiu" })).toString("base64");
+  assert.throws(() => parsePanel(`${PANEL_MARKER} base64\n${unknown}\n-->`), /estado desconhecido/);
+});
+
+test("sanitizeText strips ANSI codes and control characters, keeping text and newlines", () => {
+  assert.equal(sanitizeText(ANSI_LOG), "x\n\\ ❯ TransformPluginContext\nend");
+  assert.equal(sanitizeText(null), "");
+});
+
+test("failed-check feedback, history and comments carry no control characters", () => {
+  const checks = [{ name: "testes", result: "fail", notes: ANSI_LOG }];
+  const { state, outcome } = evaluateStage(
+    at("verificacao", { attempts: { implementacao: 1 } }),
+    "verificacao",
+    { checks },
+    ctx
+  );
+  const control = /[\u0000-\u0008\u000b-\u001f\u007f]/;
+  assert.equal(state.state, "implementacao");
+  assert.ok(!control.test(state.feedback), state.feedback);
+  assert.match(state.feedback, /TransformPluginContext/);
+  const comment = renderStageComment({ stage: "verificacao", outcome, state, body: `log:\n${ANSI_LOG}` });
+  assert.ok(!control.test(comment));
 });
 
 test("stage comment lists exit conditions and the decision to take", () => {

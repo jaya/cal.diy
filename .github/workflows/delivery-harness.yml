@@ -103,6 +103,12 @@ jobs:
         if: steps.route.outputs.stage == 'implementacao' || steps.route.outputs.stage == 'verificacao'
         uses: ./.github/actions/yarn-install
 
+      # Same as unit-tests.yml: generated Prisma code (e.g. packages/prisma/enums)
+      # is gitignored, and tests that import it fail to load without it.
+      - name: Generate Prisma client
+        if: steps.route.outputs.stage == 'implementacao' || steps.route.outputs.stage == 'verificacao'
+        run: yarn prisma generate
+
       # --- stages: each writes <run-dir>/facts.json (+ body.md); advance.mjs judges them
 
       - name: "Stage: triagem"

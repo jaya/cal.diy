@@ -44,10 +44,13 @@ run_check() { # name command...
   local name="$1"; shift
   local log="$RUN_DIR/logs/$name.log"
   # Code under test came from the agent: run it without GitHub credentials.
-  if env -u GH_TOKEN -u GITHUB_TOKEN timeout 1500 "$@" > "$log" 2>&1; then
+  # No colours: the log tail goes into issue comments and the agent's feedback.
+  if env -u GH_TOKEN -u GITHUB_TOKEN NO_COLOR=1 FORCE_COLOR=0 CI=true timeout 1500 "$@" > "$log" 2>&1; then
     record "$name" pass "$*" ""
     : > "$log"
   else
+    # Strip whatever ANSI codes a tool still emits (lib.mjs sanitizes again before posting).
+    sed -i -E 's/\x1b\[[0-9;?]*[a-zA-Z]//g' "$log"
     record "$name" fail "$*" "$(tail -n 25 "$log" | tail -c 1500)"
   fi
 }
