@@ -9,6 +9,7 @@
 export const TRIGGER_LABEL = "priorizado";
 export const LABEL_PREFIX = "harness:";
 export const PANEL_MARKER = "<!-- delivery-harness:state";
+const PANEL_ENCODING = "base64";
 export const DEFAULT_LIMITS = {
   maxAttempts: 2,
   maxChangedLines: 500,
@@ -315,7 +316,9 @@ function renderCheckFeedback(results) {
   const failed = results.filter((c) => c.result === "fail");
   return [
     "As verificações automáticas falharam. Corrija no mesmo branch:",
-    ...failed.map((c) => `- ${c.name}${c.command ? ` (\`${c.command}\`)` : ""}: ${c.notes ?? "falhou"}`),
+    ...failed.map(
+      (c) => `- ${c.name}${c.command ? ` (\`${c.command}\`)` : ""}: ${sanitizeText(c.notes ?? "falhou")}`
+    ),
   ].join("\n");
 }
 
@@ -377,7 +380,7 @@ export function evaluateStage(state, stage, facts, { now, limits = DEFAULT_LIMIT
         result,
         to: next,
         by: "harness",
-        details: error ?? summarizeChecks(gate.checks),
+        details: sanitizeText(error ?? summarizeChecks(gate.checks)),
         run: runUrl,
       },
     ],
@@ -400,9 +403,10 @@ export function renderPanel(state) {
   const info = STATES[state.state];
   const commands = allowedCommands(state);
   const lines = [
-    `${PANEL_MARKER}`,
-    // `>` only occurs inside JSON strings; escaping it keeps feedback like "-->" from closing the comment.
-    JSON.stringify(state).replace(/>/g, "\\u003e"),
+    `${PANEL_MARKER} ${PANEL_ENCODING}`,
+    // Base64 keeps the state byte-exact: GitHub rewrites some characters of a
+    // comment body (e.g. control characters), which once broke the JSON.
+    Buffer.from(JSON.stringify(state), "utf8").toString("base64"),
     "-->",
     "## 🤖 Harness de entrega",
     "",
@@ -432,13 +436,25 @@ export function renderPanel(state) {
   return lines.join("\n");
 }
 
+export class PanelError extends Error {}
+
+// Returns null for a comment that isn't a panel. A panel that can't be read
+// throws: treating it as "no state" would silently stop the issue.
 export function parsePanel(body) {
   if (!body?.startsWith(PANEL_MARKER)) return null;
-  const json = body.slice(PANEL_MARKER.length).split("\n-->")[0].trim();
+  const header = body.slice(PANEL_MARKER.length).split("\n-->")[0];
+  const [encoding, ...rest] = header.trim().split("\n");
+  // Panels written before base64 carry the JSON right after the marker.
+  const payload =
+    encoding === PANEL_ENCODING
+      ? Buffer.from(rest.join("").trim(), "base64").toString("utf8")
+      : header.trim();
   try {
-    return JSON.parse(json);
-  } catch {
-    return null;
+    const state = JSON.parse(payload);
+    if (!STATES[state?.state]) throw new Error(`estado desconhecido: ${state?.state}`);
+    return state;
+  } catch (err) {
+    throw new PanelError(`painel de estado ilegível (${err.message})`);
   }
 }
 
@@ -456,7 +472,7 @@ export function renderStageComment({ stage, outcome, state, runUrl, body }) {
       lines.push(`| ${c.name} | ${c.pass ? "✅" : "❌"} | ${escapeCell(c.details ?? "")} |`);
     lines.push("");
   }
-  if (body) lines.push(body.trim(), "");
+  if (body) lines.push(sanitizeText(body).trim(), "");
   if (STATES[outcome.next]?.kind === "human") {
     lines.push(
       "**Decisão necessária:** " +
@@ -470,7 +486,16 @@ export function renderStageComment({ stage, outcome, state, runUrl, body }) {
   return lines.join("\n");
 }
 
-const escapeCell = (text) => String(text).replace(/\|/g, "\\|").replace(/\r?\n/g, " ").slice(0, 300);
+// Tool output (vitest, biome…) carries ANSI colour codes and other control
+// characters; they are noise in comments and GitHub rewrites them on save.
+export const sanitizeText = (text) =>
+  String(text ?? "")
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\u001b[@-_]/g, "")
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
+
+const escapeCell = (text) => sanitizeText(text).replace(/\|/g, "\\|").replace(/\r?\n/g, " ").slice(0, 300);
 
 // Sections the planning agent must produce (checked by the planejamento gate).
 export const PLAN_SECTIONS = ["Problema", "Abordagem", "Premissas", "Arquivos", "Testes"];

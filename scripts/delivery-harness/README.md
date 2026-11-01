@@ -56,8 +56,14 @@ na issue e pede decisões humanas por comentários.
 | `.claude/skills/harness-plan`, `harness-implement` | Instruções do agente em cada etapa. |
 
 **Estado:** um comentário-painel na issue (feito pelo `github-actions[bot]`)
-guarda o JSON do estado num comentário HTML e mostra o histórico de todas as
-etapas e decisões. A label `harness:<estado>` espelha o estado para filtros.
+guarda o JSON do estado, em base64, num comentário HTML e mostra o histórico de
+todas as etapas e decisões. A label `harness:<estado>` espelha o estado para
+filtros. O base64 existe porque o GitHub reescreve caracteres de controle ao
+salvar um comentário — saída do vitest com cores ANSI já corrompeu o JSON. Se o
+painel não puder ser lido, o harness comenta o erro na issue e a execução falha;
+ele nunca segue como se a issue não tivesse estado. Textos de ferramentas
+(feedback, histórico, comentários) passam por `sanitizeText`, que remove
+códigos ANSI e caracteres de controle.
 
 **Encadeamento:** cada execução roda no máximo uma etapa. Eventos criados com o
 `GITHUB_TOKEN` não disparam workflows, exceto `workflow_dispatch` — por isso o
@@ -75,7 +81,7 @@ um humano cancelar durante uma etapa, o resultado dela é descartado.
 | triagem | juiz de ambiguidade (`scripts/issue-ambiguity`) dá 0–1 | 2–3 → pede esclarecimento |
 | planejamento | `plan.md` existe, tem as seções Problema/Abordagem/Premissas/Arquivos/Testes e nenhum arquivo do repo mudou | repete / bloqueia; `needs_clarification` → pede esclarecimento |
 | implementacao | agente reporta `completed`, há commits novos, árvore limpa, branch publicado e PR rascunho aberto | repete / bloqueia; acima de `HARNESS_MAX_CHANGED_LINES`/`FILES` → decisão de escopo |
-| verificacao | lint (biome), testes alterados (vitest) e type-check dos workspaces tocados passam; lógica `.ts` vem com teste. Se a política de auto-aprovação aprovar o mesmo commit verificado → `auto-aprovacao`; senão → revisão humana | volta à implementação com as falhas como feedback |
+| verificacao | depois de `yarn prisma generate` (como o `unit-tests.yml`), lint (biome), testes alterados (vitest) e type-check dos workspaces tocados passam, rodando sem cores; lógica `.ts` vem com teste. Se a política de auto-aprovação aprovar o mesmo commit verificado → `auto-aprovacao`; senão → revisão humana | volta à implementação com as falhas como feedback |
 | auto-aprovacao | PR ainda no commit verificado, fora de rascunho, aprovado nesse commit e mergeado — cada passo relido da API | volta para `aguardando-revisao` (sem retry) com o motivo |
 
 ### Auto-aprovação
