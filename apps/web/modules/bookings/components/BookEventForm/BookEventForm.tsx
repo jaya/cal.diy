@@ -1,3 +1,4 @@
+import dayjs from "@calcom/dayjs";
 import { getPaymentAppData } from "@calcom/app-store/_utils/payments/getPaymentAppData";
 import { useIsPlatformBookerEmbed } from "@calcom/atoms/hooks/useIsPlatformBookerEmbed";
 import { useBookerStoreContext } from "@calcom/features/bookings/Booker/BookerStoreProvider";
@@ -108,6 +109,7 @@ export const BookEventForm = ({
   }
 
   const watchedCfToken = bookingForm.watch("cfToken");
+  const isOutsideBusinessHours = isTimeslotOutsideBusinessHours(timeslot, timezone);
 
   return (
     <div className="flex flex-col h-full">
@@ -132,6 +134,16 @@ export const BookEventForm = ({
           isPaidEvent={isPaidEvent}
           paymentCurrency={paymentCurrency}
         />
+        {isOutsideBusinessHours && (
+          <div data-testid="outside-business-hours-warning">
+            <Alert
+              className="my-2"
+              severity="warning"
+              title={t("outside_business_hours_title")}
+              message={t("outside_business_hours_description")}
+            />
+          </div>
+        )}
         {errors.hasFormErrors || errors.hasDataErrors ? (
           <div data-testid="booking-fail">
             <Alert
@@ -319,3 +331,15 @@ const getError = ({
     <>{t("can_you_try_again")}</>
   );
 };
+
+const BUSINESS_HOURS_START = 9;
+const BUSINESS_HOURS_END = 18;
+
+export function isTimeslotOutsideBusinessHours(timeslot: string, timezone: string): boolean {
+  const start = dayjs(timeslot).tz(timezone);
+  if (!start.isValid()) return false;
+  const day = start.day();
+  if (day === 0 || day === 6) return true;
+  const minutes = start.hour() * 60 + start.minute();
+  return minutes < BUSINESS_HOURS_START * 60 || minutes >= BUSINESS_HOURS_END * 60;
+}
